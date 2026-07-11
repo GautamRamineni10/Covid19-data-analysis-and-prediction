@@ -1,0 +1,1099 @@
+---
+title: "Final Project- Ramineni Gautam Kumar"
+output: html_notebook
+---
+#### **Problem Statement**
+
+###### **A big part of customer relationship management involves efforts to retain existing customers. This is because in many cases the costs incurred to attract new customers are much larger than the costs to retain the existing customers. As part of the class project, your goal is to analyze customer data of a telecommunications company and identify the ones that are likely to leave so that you can take some action to retain them by offering incentives. The data is spread over two .rda files, Model_Building_Data and Implementation_Data. Model_Building_Data should be used to build the model. It contains current customers as well as customers who have left. The description of the columns in this dataset is below:**
+
+```{r}
+load("Model_Building_Data.rda") #Loading the data
+head(Model_Building_Data) #Previewing data
+```
+
+#### **Question 1:**
+##### **Data preparation and Exploratory Data Analysis**
+
+###### **Start with the Model_Building_Data file and follow concepts learnt in Week 2 to clean the data (the other data file will be used in part 8). If there are missing values then indicate how you plan to work with them.**
+
+```{r}
+colSums(is.na(Model_Building_Data)) 
+```
+###### There are 11 missing values in the TotalCharges column. I will replace them with the median to keep the data balanced.
+
+
+```{r}
+library(dplyr)
+
+# Check for missing values before imputation
+cat("Missing values before imputation:\n")
+print(colSums(is.na(Model_Building_Data)))
+
+# Impute missing TotalCharges with the median
+Model_Building_Data <- Model_Building_Data %>%
+  mutate(TotalCharges = ifelse(is.na(TotalCharges),
+                               median(TotalCharges, na.rm = TRUE),
+                               TotalCharges))
+
+# Confirm that missing values are handled
+cat("\nMissing values after imputing TotalCharges:\n")
+print(colSums(is.na(Model_Building_Data)))
+
+```
+###### **Explore the dataset and use data visualization to describe underlying trends. Record your observations on the distributions of each variable.**
+
+```{r}
+library(ggplot2)
+library(gridExtra)
+
+# Plot for Tenure
+p1 <- ggplot(Model_Building_Data, aes(x = Tenure)) +
+  geom_histogram(binwidth = 5, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Tenure", x = "Tenure (Months)", y = "Count") +
+  theme_minimal()
+
+# Plot for Monthly Charges
+p2 <- ggplot(Model_Building_Data, aes(x = MonthlyCharges)) +
+  geom_histogram(binwidth = 10, fill = "lightgreen", color = "black") +
+  labs(title = "Distribution of Monthly Charges", x = "Monthly Charges ($)", y = "Count") +
+  theme_minimal()
+
+# Plot for Total Charges
+p3 <- ggplot(Model_Building_Data, aes(x = TotalCharges)) +
+  geom_histogram(binwidth = 100, fill = "lightcoral", color = "black") +
+  labs(title = "Distribution of Total Charges", x = "Total Charges ($)", y = "Count") +
+  theme_minimal()
+
+# Arrange the three plots side by side
+grid.arrange(p1, p2, p3, nrow = 1)
+
+```
+
+```{r}
+summary(Model_Building_Data[c("Tenure","MonthlyCharges","TotalCharges")])
+```
+###### **• Tenure:**
+###### Many customers either just started or have been with the company for a long time (close to 60 months). The rest are spread fairly evenly in between.
+
+###### **• Monthly Charges:**
+###### Most customers pay between $20 and $40 per month. There are a decent number of customers paying between $50 and $90, but fewer pay more than that.
+
+###### **• Total Charges:**
+###### Only a few customers have very high total charges. As total charges go up, the number of customers goes down. This means that only a small number of people have stayed long enough to pay a lot overall.
+
+
+```{r}
+library(ggplot2)
+library(gridExtra)
+
+# List of selected categorical columns to plot
+cat_columns <- c("Gender", "SeniorCitizen", "Contract", "Dependents",
+                 "PhoneService", "InternetService", "PaperlessBilling", "Status")
+
+# Custom colors for each plot (repeat or expand as needed)
+custom_colors <- c("skyblue", "lightgreen", "plum", "gold", 
+                   "coral", "lightsteelblue", "orange", "orchid")
+
+# Function to create bar plots for each categorical variable
+create_count_plots <- function(data, cat_columns, colors) {
+  plots <- list()
+  for (i in seq_along(cat_columns)) {
+    col <- cat_columns[i]
+    plot <- ggplot(data, aes(x = .data[[col]])) +
+      geom_bar(fill = colors[i], color = "black") +
+      labs(title = paste("Distribution of", col),
+           x = col,
+           y = "Count") +
+      theme_minimal() +
+      theme(
+        axis.text.x = element_text(size = 8, angle = 45, hjust = 1),
+        axis.text.y = element_text(size = 8),
+        axis.title.x = element_text(size = 9),
+        axis.title.y = element_text(size = 9),
+        plot.title = element_text(size = 9, face = "bold")
+      )
+    plots[[i]] <- plot
+  }
+  return(plots)
+}
+
+# Generate plots with custom colors
+plots <- create_count_plots(Model_Building_Data, cat_columns, custom_colors)
+
+# Arrange the plots in 2 rows
+grid.arrange(grobs = plots, nrow = 2)
+
+```
+###### **• Gender:** There are almost the same number of male and female customers, so the data is balanced in terms of gender.
+
+###### **• Senior Citizen:** Most customers are not senior citizens, and only a small number are.
+
+###### **• Contract:** Most people use month-to-month contracts. Fewer have one-year or two-year contracts. This might mean that month-to-month customers are more likely to leave.
+
+###### **• Dependents:** Most customers don’t have dependents, while some do.
+
+###### **• Phone Service:** Almost all customers have phone service. Only a few do not.
+
+###### **• Internet Service:** Fiber optic is the most used internet type, followed by DSL. Some customers don’t have internet service at all.
+
+###### **• Paperless Billing**: More people choose paperless billing instead of getting printed bills.
+
+###### **• Status:** Most customers are still with the company ("Current"), while a smaller group has left, showing customer churn.
+
+
+
+###### **Report your detailed observations of any apparent relationship between customer status and each independent variable.**
+
+```{r}
+# Define a new color scheme for the statuses
+status_colors <- c("darkgreen", "orange")
+
+qual_Variables <-  c("Gender", "SeniorCitizen", "Contract", "Dependents", "PhoneService", "InternetService", "PaperlessBilling","Partner","MultipleLines","OnlineSecurity","DeviceProtection","PaymentMethod")
+
+# Set up a grid layout for 1 rows and 4 columns of plots
+par(mfrow=c(1, 4))
+
+# Loop through the selected categorical columns and create bar plots for each
+for (col in qual_Variables) {
+  # Create a contingency table for 'Status' and the categorical variable
+  contingency_table <- table(Model_Building_Data$Status, Model_Building_Data[[col]])
+  
+  # Create a bar plot with the new color scheme
+  barplot(contingency_table, main=paste(col, " Status"),
+          col=status_colors, beside=TRUE)  # 'beside=TRUE' for side-by-side bars
+  
+  # Add a legend with the status labels and the new colors
+  legend("topright", legend=rownames(contingency_table), fill=status_colors, cex=0.7, 
+         bty="n", title="Status")
+}
+```
+###### **• Gender:** Men and women leave at about the same rate. Most people in both groups are still current customers.
+
+###### **• Senior Citizen:** Senior citizens are more likely to leave. Most non-senior citizens are still with the company.
+
+###### **• Contract:** People on month-to-month contracts leave more often. Those with one-year or two-year contracts tend to stay, which suggests longer contracts help reduce customer loss.
+
+###### **• Dependents:** Customers with dependents are slightly less likely to leave than those without, but the difference is small.
+
+###### **• Phone Service:** Most people with phone service stay. More people without phone service have left.
+
+###### **• Internet Service:** Customers with fiber optic internet are more likely to leave. Those with DSL or no internet stay more often, which might mean there’s an issue with the fiber service.
+
+###### **• Paperless Billing:** Customers who use paperless billing are more likely to leave compared to those who get printed bills.
+
+###### **• Partner:** People without a partner are more likely to leave. Most customers with a partner stay.
+
+###### **• Multiple Lines:** Customers with only one line are more likely to leave. Those with multiple lines usually stay.
+
+###### **• Online Security:** Customers who don’t have online security leave more often. People with online security tend to stay.
+
+###### **• Device Protection:** More customers without device protection leave. Those with it are more likely to remain customers.
+
+###### **• Payment Method (Bank Transfer):** People who use automatic bank transfers are more likely to stay than leave.
+
+
+
+```{r}
+library(ggplot2)
+
+ggplot(Model_Building_Data, aes(x = Tenure, fill = Status, color = Status)) +
+  geom_density(alpha = 0.4, size = 0.8) +
+  labs(
+    title = "Tenure Distribution by Customer Status",
+    x = "Tenure (Months)",
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 13, face = "bold"),
+    axis.title = element_text(size = 11),
+    legend.title = element_text(size = 10),
+    legend.position = "right"
+  ) +
+  scale_fill_manual(values = c("Current" = "darkgreen", "Left" = "tomato")) +
+  scale_color_manual(values = c("Current" = "darkgreen", "Left" = "tomato"))
+
+```
+
+###### Customers who have been with the company for less than 10 months are more likely to leave. The longer a customer stays, the less likely they are to leave. Most current customers have stayed for a long time, especially beyond 60 months.
+
+```{r}
+library(ggplot2)
+
+ggplot(Model_Building_Data, aes(x = MonthlyCharges, fill = Status, color = Status)) +
+  geom_density(alpha = 0.4, size = 0.8) +
+  labs(
+    title = "Monthly Charges Distribution by Customer Status",
+    x = "Monthly Charges ($)",
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 13, face = "bold"),
+    axis.title = element_text(size = 11),
+    legend.title = element_text(size = 10),
+    legend.position = "right"
+  ) +
+  scale_fill_manual(values = c("Current" = "darkgreen", "Left" = "tomato")) +
+  scale_color_manual(values = c("Current" = "darkgreen", "Left" = "tomato"))
+
+```
+
+###### Customers who pay lower monthly charges (around $20–$30) are more likely to stay. Those who pay more (around $70–$100) are more likely to leave. Churn happens at all charge levels, but it becomes more common as the monthly charges go up.
+
+```{r}
+library(ggplot2)
+
+ggplot(Model_Building_Data, aes(x = TotalCharges, fill = Status, color = Status)) +
+  geom_density(alpha = 0.4, size = 0.8) +
+  labs(
+    title = "Total Charges Distribution by Customer Status",
+    x = "Total Charges ($)",
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 13, face = "bold"),
+    axis.title = element_text(size = 11),
+    legend.title = element_text(size = 10),
+    legend.position = "right"
+  ) +
+  scale_fill_manual(values = c("Current" = "darkgreen", "Left" = "tomato")) +
+  scale_color_manual(values = c("Current" = "darkgreen", "Left" = "tomato"))
+
+```
+
+###### Customers with lower total charges are more likely to leave. As total charges increase, the number of customers leaving goes down, while more long-term (current) customers have higher total charges
+
+###### **Create any new columns if you need to at this point.**
+
+```{r}
+library(dplyr)
+Model_Building_Data <- Model_Building_Data %>% 
+  mutate(SeniorCitizen = as.factor(SeniorCitizen)) %>%
+  mutate(Status = as.factor(Status))
+```
+
+
+###### **Once you are done with the above, split the data set randomly into a training set (80%) and a test set (20%).**
+
+
+```{r}
+set.seed(400)
+num_rows <- nrow(Model_Building_Data)
+
+# Create a logical vector for training indices
+train_indices <- sample(seq_len(num_rows), size = 0.8 * num_rows, replace = FALSE)
+
+# Use the negation of the training indices to get test indices
+test_indices <- setdiff(seq_len(num_rows), train_indices)
+
+# Split the data into training and testing datasets
+train_data <- Model_Building_Data[train_indices, ]
+test_data <- Model_Building_Data[test_indices, ]
+```
+
+```{r}
+str(train_data)
+```
+
+```{r}
+str(test_data)
+```
+
+#### **Question 2**
+##### **Logistic Regression** 
+
+###### **Use the training set to build a Logistic Regression model to predict the probability for losing a customer.**
+
+```{r}
+library(dplyr)
+library(caret)
+library(ROCR)
+library(pROC)
+```
+
+```{r}
+logistic_Model <- glm(Status ~ ., data = train_data, family = binomial)
+summary(logistic_Model)
+```
+
+###### **Try different combinations of variables and arrive at the model that maximizes AUC (Area Under the Curve) for the ROC plots.**
+
+```{r}
+variables <- c("Tenure", "MonthlyCharges", "TotalCharges", "SeniorCitizen", 
+               "MultipleLines", "InternetService", "OnlineSecurity", "Contract", 
+               "PaperlessBilling", "PaymentMethod")
+
+# Initialize variables to store the best model and its corresponding AUC
+best_auc <- 0
+best_logistic_model <- NULL
+best_formula <- NULL
+
+# Iterate through different combinations of variables
+for (i in seq_along(variables)) {
+  # Generate all possible combinations of variables of size 'i'
+  comb_list <- combn(variables, i, simplify = FALSE)
+  
+  # Iterate through each combination of variables
+  for (comb in comb_list) {
+    # Build the formula for logistic regression
+    formula <- as.formula(paste("Status ~", paste(comb, collapse = "+")))
+    
+    # Fit the logistic regression model
+    model <- glm(formula, data = train_data, family = binomial)
+    
+    # Predict probabilities for the training set
+    train_pred <- predict(model, type = "response")
+    
+    # Calculate the ROC curve and AUC
+    roc_obj <- roc(train_data$Status, train_pred, quiet = TRUE)
+    auc_value <- auc(roc_obj)
+    
+    # If the current model has a better AUC, store it as the best model
+    if (auc_value > best_auc) {
+      best_auc <- auc_value
+      best_logistic_model <- model
+      best_formula <- formula
+    }
+  }
+}
+
+# Output the summary of the best logistic model
+summary(best_logistic_model)
+
+```
+
+```{r}
+print(best_auc)
+```
+
+```{r}
+# Extract and clean predictor terms from the best model formula
+predictors <- gsub("\\s*\\+\\s*", ", ", best_formula)   # Replace '+' with comma
+predictors <- gsub("^.*~\\s*", "", predictors)          # Remove everything before '~'
+
+# Display the result
+cat("Predictors of the best logistic model with highest AUC are:\n", predictors, "\n")
+
+```
+
+```{r}
+# Calculate the AUC and round it to 4 decimal places
+auc_value <- round(auc(roc_obj), 4)
+
+# Plot the ROC curve
+plot(roc_obj,
+     main = paste("ROC Curve - Logistic Regression\n(AUC =", auc_value, ")"),
+     col = "darkgreen",
+     lwd = 2)
+
+# Add a diagonal reference line (random classifier)
+abline(a = 0, b = 1, lty = 2, col = "tomato")
+
+# Annotate the AUC value on the plot
+text(0.65, 0.3,
+     labels = paste("AUC =", auc_value),
+     col = "darkgreen",
+     cex = 1.1,
+     font = 2)
+
+```
+
+###### **For the model with the highest AUC, interpret each coefficient and provide guidance to the reader on how varying the different variables will influence customer behavior.**
+
+
+###### Model with Highest AUC: Linear Discriminant Analysis (LDA) AUC: 0.8574 | Best Accuracy: 81.54%
+
+###### **• SeniorCitizen:** Older customers are more likely to leave than younger ones. The company should try to keep them by offering easier plans or special deals just for them.
+
+###### **• Contract (One year / Two year):** Customers with one- or two-year contracts are less likely to leave than those who pay month-to-month. Offering benefits for choosing longer contracts can help keep more customers.
+
+###### **• Payment Method (Electronic Check):** Customers who pay using electronic checks are more likely to leave. To reduce this, the company can offer rewards to encourage them to switch to automatic or credit card payments.
+
+###### **• Tenure:** Customers who have been with the company for a long time are less likely to leave. It's important to give extra attention to new customers early on, since they are more likely to leave.
+
+###### **• Total Charges:** Customers who have spent more money over time are less likely to leave. These loyal, long-term customers are very valuable and should be treated as a top priority.
+
+###### **• Multiple Lines (Yes):** Customers who have more than one service line are a bit more likely to leave. To keep them, the company can offer bundle deals or loyalty rewards.
+
+###### **• Internet Service (Fiber Optic):** Customers using fiber optic internet are more likely to leave than those using DSL. The company should check for any problems or dissatisfaction with the fiber service.
+
+###### **• Paperless Billing (Yes):** Customers who use paperless billing are more likely to leave. To help keep them, the company should make sure the online experience is easy to use and consider asking for their feedback.
+
+###### **• Final Takeaway:** The LDA model shows that customers who are new, use fiber optic internet, or pay with flexible or electronic billing options are more likely to leave. Focusing on keeping these groups happy can help improve overall customer loyalty.
+
+
+
+
+
+
+
+###### **Try different thresholds to identify the threshold with the highest prediction accuracy on the test set.**
+
+
+```{r}
+# Define threshold range for classification
+thresholds <- seq(0.4, 0.8, by = 0.01)
+
+# Initialize vector to store accuracy values
+accuracy <- numeric(length(thresholds))
+
+# Loop through thresholds to evaluate classification accuracy
+for (i in seq_along(thresholds)) {
+  # Make predictions based on current threshold
+  predicted_status <- ifelse(
+    predict(best_logistic_model, newdata = test_data, type = "response") > thresholds[i],
+    "Left", "Current"
+  )
+  
+  # Calculate accuracy at the current threshold
+  accuracy[i] <- mean(predicted_status == test_data$Status)
+}
+
+# Identify threshold with the highest accuracy
+best_threshold <- thresholds[which.max(accuracy)]
+best_accuracy <- max(accuracy)
+
+# Output the best threshold and corresponding accuracy
+cat("Best AUC:", round(best_auc, 4), "\n")
+
+```
+
+```{r}
+cat("Best Threshold:", best_threshold, "\n")
+```
+
+```{r}
+cat("Best Accuracy:", round(best_accuracy, 4), "\n")
+```
+
+#### **Question 3**
+
+##### **Naive Bayes** 
+
+###### **Use the training set to build a *Naive Bayes* model to predict the probability for losing a customer.**
+
+```{r}
+# Convert SeniorCitizen to factor
+Model_Building_Data$SeniorCitizen <- factor(Model_Building_Data$SeniorCitizen, levels = c(0, 1), labels = c("No", "Yes"))
+
+# Prepare binned variables
+nb_data <- Model_Building_Data %>%
+  mutate(
+    Tenure_binned = factor(ifelse(Tenure < 36, "Short", "Long")),
+    TotalCharges_binned = cut(
+      TotalCharges,
+      breaks = c(-Inf, 2500, 5000, Inf),
+      labels = c("Low", "Medium", "High"),
+      right = FALSE
+    )
+  )
+
+# Set seed for reproducibility
+set.seed(400)
+
+# Split into training and testing sets (80/20)
+train_indices <- sample(seq_len(nrow(nb_data)), size = 0.8 * nrow(nb_data))
+nb_train_data <- nb_data[train_indices, ]
+nb_test_data  <- nb_data[-train_indices, ]
+
+```
+
+
+```{r}
+library(e1071)
+nb_model <- naiveBayes(Status ~ SeniorCitizen + MultipleLines + InternetService + Contract + PaymentMethod + Tenure_binned +TotalCharges_binned , data = nb_train_data, laplace = 0.01)
+nb_model
+```
+
+```{r}
+roc(test_data$Status, predict(nb_model, newdata = nb_test_data, type = "raw")[,1],plot=TRUE,print.auc=TRUE)
+```
+
+###### **Try different combinations of variables and arrive at the model that maximizes AUC (Area Under the Curve) for the ROC plots.**
+
+```{r}
+# Fit a Naive Bayes model with selected predictors and slight Laplace smoothing
+nb_model2 <- naiveBayes(
+  Status ~ SeniorCitizen + Contract + PaymentMethod + Tenure_binned + TotalCharges_binned,
+  data = nb_train_data,
+  laplace = 0.01
+)
+
+# Display model summary
+print(nb_model2)
+
+```
+
+```{r}
+roc(test_data$Status, predict(nb_model2, newdata = nb_test_data, type = "raw")[,1],plot=FALSE,print.auc=TRUE)
+```
+
+###### **For the model with the highest AUC, try different thresholds to identify the threshold with the highest prediction accuracy on the test set.**
+
+
+```{r}
+# Function to calculate accuracy based on a probability threshold
+calculate_accuracy <- function(probabilities, threshold) {
+  predicted_status <- ifelse(probabilities >= threshold, "Current", "Left")
+  mean(predicted_status == test_data$Status)
+}
+
+# Define the thresholds to test
+thresholds <- seq(0.3, 0.7, by = 0.01)
+
+# Get predicted probabilities for the "Current" class once
+nb_probabilities <- predict(nb_model, test_data, type = "raw")[, "Current"]
+
+# Calculate accuracy for each threshold
+accuracy_results <- sapply(thresholds, function(th) calculate_accuracy(nb_probabilities, th))
+
+# Identify the best threshold and accuracy
+best_threshold <- thresholds[which.max(accuracy_results)]
+best_accuracy <- max(accuracy_results)
+
+# Display results
+cat("Best Threshold:", round(best_threshold, 2), 
+    "| Accuracy:", round(best_accuracy, 4), "\n")
+
+```
+
+#### **Question 4**
+
+##### **Linear Discriminant Analysis** 
+
+###### **Use the training set to build a model using Linear Discriminant Analysis to predict the probability for losing a customer.**
+
+```{r}
+library(MASS)
+library(caret)
+library(tidyverse)
+library(ISLR)
+```
+
+
+```{r}
+lda_model <- lda(Status ~ SeniorCitizen + MultipleLines + InternetService + Contract + PaymentMethod + Tenure +TotalCharges, data = train_data)
+lda_model
+```
+
+###### **Try different combinations of variables and arrive at the model that maximizes AUC (Area Under the Curve) for the ROC plots.**
+
+```{r}
+roc(test_data$Status, predict(lda_model, newdata = test_data, type = "raw")$x,plot=TRUE,print.auc=TRUE)
+```
+
+```{r}
+lda_modelb <- lda(Status ~ SeniorCitizen  + Contract + PaymentMethod + Tenure +TotalCharges + MultipleLines +InternetService+PaperlessBilling , data = train_data)
+```
+
+
+```{r}
+lda_modelb
+```
+
+```{r}
+roc(test_data$Status, predict(lda_model2, newdata = test_data, type = "raw")$x,plot=TRUE,print.auc=TRUE)
+```
+
+###### **For the model with the highest AUC, try different thresholds to identify the threshold with the highest prediction accuracy on the test set.**
+
+
+```{r}
+LDA_Predictions_best <- predict(lda_modelb,newdata = test_data)$posterior[,2]
+```
+
+```{r}
+# Define a wider range of thresholds to test
+thresholds <- seq(0.1, 0.9, by = 0.01)
+accuracy_list <- numeric(length(thresholds))  # Vector to store accuracy values
+
+# Evaluate accuracy at each threshold
+for (i in seq_along(thresholds)) {
+  predicted_status <- ifelse(LDA_Predictions_best > thresholds[i], "Left", "Current")
+  predicted_status <- factor(predicted_status, levels = levels(test_data$Status))
+  
+  # Create confusion matrix and calculate accuracy
+  cm <- table(predicted_status, test_data$Status)
+  accuracy_list[i] <- sum(diag(cm)) / sum(cm)
+}
+
+# Identify the threshold with the highest accuracy
+best_index <- which.max(accuracy_list)
+best_threshold <- thresholds[best_index]
+best_accuracy <- accuracy_list[best_index]
+
+# Output results
+cat("Best Threshold:", round(best_threshold, 2), 
+    "| Accuracy:", round(best_accuracy, 4), "\n")
+
+```
+
+#### **Question 5**
+
+##### **Quadratic Discriminant Analysis**
+
+###### **Use the training set to build a model using *Quadratic Discriminant Analysis* to predict the probability for losing a customer.**
+
+```{r}
+library(caret)
+
+qda_model <- qda(Status ~ SeniorCitizen + Contract + PaymentMethod + Tenure + TotalCharges, data = train_data)
+qda_predictions <- predict(qda_model, test_data)$class
+qda_predictions <- factor(qda_predictions, levels = levels(test_data$Status))
+# Evaluate model performance
+confusionMatrix(qda_predictions, test_data$Status, positive = "Current")
+```
+
+###### **Try different combinations of variables and arrive at the model that maximizes AUC (Area Under the Curve) for the ROC plots.**
+
+```{r}
+roc(test_data$Status, predict(qda_model, newdata = test_data, type = "raw")[["posterior"]][,2],plot=TRUE,print.auc=TRUE)
+```
+
+```{r}
+# Train QDA model using selected predictors
+qda_model2 <- qda(
+  Status ~ SeniorCitizen + Contract + PaymentMethod + Tenure + 
+    TotalCharges + MultipleLines + InternetService + PaperlessBilling,
+  data = train_data
+)
+print(qda_model2)
+```
+
+```{r}
+tree_model <- tree(Status ~ ., data = train_data)
+str(tree_model)
+
+```
+
+###### **For the model with the highest AUC, try different thresholds to identify the threshold with the highest prediction accuracy on the test set.**
+
+```{r}
+# Load the MASS package for QDA
+library(MASS)
+
+# Predict posterior probabilities for the "Left" class
+QDA_Predictions_best <- predict(qda_model2, newdata = test_data)$posterior[, "Left"]
+```
+
+
+```{r}
+thresholds <- seq(0.1, 0.9, by = 0.01)
+accuracy_list <- numeric(length(thresholds)) 
+
+for (i in seq_along(thresholds)) {
+  predicted_status <- ifelse(QDA_Predictions_best > thresholds[i], "Left", "Current")
+  predicted_status <- factor(predicted_status, levels = levels(test_data$Status))
+  
+  # Compute confusion matrix and accuracy
+  cm <- table(predicted_status, test_data$Status)
+  accuracy_list[i] <- sum(diag(cm)) / sum(cm)
+}
+
+# Find best threshold and corresponding accuracy
+best_index <- which.max(accuracy_list)
+best_threshold <- thresholds[best_index]
+best_accuracy <- accuracy_list[best_index]
+
+cat("Best Threshold:", round(best_threshold, 2), 
+    "| Accuracy:", round(best_accuracy, 4), "\n")
+
+```
+#### **Question 6**
+
+##### **Decision Trees** 
+
+###### **Use the training set to build a *Decision Tree* model to predict the probability for losing a customer.**
+
+```{r}
+library(tree)
+
+tree_model2 <- tree(
+  Status ~ SeniorCitizen + Contract + PaymentMethod + Tenure + TotalCharges + 
+    MultipleLines + InternetService + PaperlessBilling,
+  data = train_data
+)
+```
+
+```{r}
+
+# Plot the decision tree with black branches
+plot(tree_model2,
+     main = "Decision Tree for Customer Status",
+     col = "black")  # Sets the color of the tree branches
+
+# Add text labels to the nodes
+text(tree_model2,
+     pretty = 0,
+     cex = 0.7,
+     col = "darkblue")  # Sets label color
+```
+
+```{r}
+set.seed(400)
+cv.tree2 <- cv.tree(tree_model2, FUN = prune.misclass)
+str(cv.tree2)
+```
+
+```{r}
+# Plot the decision tree with enhanced visual styling
+plot(tree_model,
+     main = "Decision Tree for Customer Churn",
+     col = "black",          
+     lty = 1,                 
+     lwd = 1.5)              
+
+# Add text labels to the tree nodes
+text(tree_model,
+     pretty = 0,
+     cex = 0.8,               
+     col = "darkblue")            
+
+```
+
+```{r}
+set.seed(400)
+cv.tree <- cv.tree(tree_model, FUN = prune.misclass)
+str(cv.tree)
+```
+
+```{r}
+# Plot tree size vs. misclassification error from cross-validation
+plot(cv.tree$size, cv.tree$dev,
+     type = "b",                     
+     col = "darkred",               
+     pch = 19,                       
+     lwd = 2,                       
+     xlab = "Tree Size (Terminal Nodes)",
+     ylab = "Misclassification Error",
+     main = "Cross-Validation Results for Tree Pruning")
+
+```
+
+```{r}
+tree_pruned <- prune.misclass(tree_model, best = 4)
+
+plot(tree_pruned,
+     main = "Pruned Decision Tree (4 Terminal Nodes)",
+     col = "black",
+     lwd = 1.5)
+
+text(tree_pruned,
+     pretty = 0,
+     cex = 0.8,
+     col = "darkblue")
+
+```
+
+```{r}
+# Make predictions using the pruned tree
+prediction <- predict(tree_pruned, test_data, type = "class")
+
+# Create a confusion matrix
+table(prediction, test_data$Status)
+
+```
+
+```{r}
+library(caret)
+
+prediction <- factor(predict(tree_pruned, test_data, type = "class"),
+                     levels = levels(test_data$Status))
+
+confusionMatrix(prediction, test_data$Status, positive = "Current")
+
+```
+###### Prediction Accuracy for the decision tree is 79.31%
+
+
+###### **Try different combinations of variables and identify the model with the largest prediction accuracy.**
+
+
+```{r}
+tree_model2 <- tree(Status ~ Tenure +TotalCharges + MonthlyCharges+Contract, data = train_data)
+str(tree_model2)
+```
+
+
+```{r}
+plot(tree_model2,
+     main = "Decision Tree for Customer Status (Full Model)",
+     col = "black",       
+     lwd = 1.5)           
+
+# Add node labels
+text(tree_model2,
+     pretty = 0,
+     cex = 0.8,           
+     col = "darkblue")        
+
+```
+
+```{r}
+set.seed(400)
+cv.tree2 <- cv.tree(tree_model2, FUN = prune.misclass)
+str(cv.tree2)
+```
+
+```{r}
+plot(cv_tree2$size, cv_tree2$dev,
+     type = "b",                         
+     pch = 19,                            
+     col = "darkred",                  
+     lwd = 2,                             
+     xlab = "Tree Size (Number of Terminal Nodes)",
+     ylab = "Misclassification Error",
+     main = "Cross-Validation for Pruning (tree_model2)")
+
+```
+
+```{r}
+tree_pruned2 <- prune.misclass(tree_model2, best = 4)
+
+plot(tree_pruned2,
+     main = "Pruned Decision Tree (4 Terminal Nodes)",
+     col = "black",
+     lwd = 1.5)
+
+text(tree_pruned2,
+     pretty = 0,
+     cex = 0.8,
+     col = "darkblue")
+
+```
+
+```{r}
+# Generate predictions from the pruned tree
+prediction2 <- predict(tree_pruned2, test_data, type = "class")
+
+# Ensure predicted classes have the same levels as the actual Status
+prediction2 <- factor(prediction2, levels = levels(test_data$Status))
+
+# Display confusion matrix
+table(prediction2, test_data$Status)
+
+```
+```{r}
+library(caret)
+
+confusionMatrix(prediction2, test_data$Status, positive = "Current")
+
+```
+###### The prediction accuracy is 78.62%
+
+
+```{r}
+tree_model3 <- tree(Status ~ Tenure +InternetService+Contract, data = train_data)
+str(tree_model3)
+```
+
+```{r}
+plot(tree_model3,
+     main = "Decision Tree for Customer Status (Model 3)",
+     col = "black",     # Dark tree branches
+     lwd = 1.5)         # Slightly thicker lines
+
+text(tree_model3,
+     pretty = 0,        # Show full factor names
+     cex = 0.8,         # Adjust label size
+     col = "darkblue")      # Label color
+
+```
+
+```{r}
+load("Implementation_Data.rda")
+impdata <- Implementation_Data
+head(impdata)
+```
+
+```{r}
+set.seed(400)  
+cv.tree3 <- cv.tree(tree_model3, FUN = prune.misclass)
+```
+
+
+```{r}
+plot(cv.tree3$size, cv.tree3$dev,
+     type = "b",
+     pch = 19,
+     col = "darkred",
+     lwd = 2,
+     xlab = "Tree Size (Terminal Nodes)",
+     ylab = "Misclassification Error",
+     main = "Cross-Validation for Tree Pruning (tree_model3)")
+
+```
+
+```{r}
+tree_pruned3 <- prune.misclass(tree_model3, best = 4)
+
+plot(tree_pruned3,
+     main = "Pruned Decision Tree (4 Terminal Nodes)",
+     col = "black",      
+     lwd = 1.5)            
+
+text(tree_pruned3,
+     pretty = 0,
+     cex = 0.8,            
+     col = "darkblue")        
+
+```
+
+```{r}
+prediction3 <- predict(tree_pruned3, test_data, type = "class")
+prediction3 <- factor(prediction3, levels = levels(test_data$Status))
+
+table(prediction3, test_data$Status)
+
+```
+
+```{r}
+confusionMatrix(prediction3, test_data$Status, positive = "Current")
+
+```
+
+#### **Question 7**
+
+##### **Comparison across Methods**
+
+###### **Compare across methods (skip the model built with decision trees) used above and report your best method based on ROC plots.**
+###### **Which model does the best in terms of the prediction accuracy on the test set? Include the decision tree model here.**
+
+```{r}
+library(knitr)
+library(kableExtra)
+library(dplyr)
+
+# Create and format the model comparison data
+model_comparison <- data.frame(
+  Model = c("Logistic Regression", "Naive Bayes", "LDA", "QDA", "Decision Tree"),
+  AUC = c(0.843, 0.8387, 0.8574, 0.843, NA),
+  Best_Threshold = c(0.55, 0.30, 0.45, 0.55, NA),
+  Accuracy = c(0.7931, 0.7862, 0.8154, 0.7931, 0.7862)
+)
+
+# Convert Accuracy to percentage format
+model_comparison <- model_comparison %>%
+  mutate(Accuracy = paste0(round(Accuracy * 100, 2), "%"))
+
+# Generate styled table
+model_comparison %>%
+  kable("html", caption = "Comparison of Classification Models") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = FALSE) %>%
+  add_header_above(c(" " = 1, "Performance Metrics" = 3)) %>%
+  column_spec(1, bold = TRUE) %>%
+  row_spec(0, bold = TRUE)
+
+```
+###### **Best Performing Model**
+###### Linear Discriminant Analysis (LDA) provided the highest AUC (0.8574) and highest prediction accuracy (81.54%), making it the best-performing model overall. Logistic Regression and QDA also performed well but slightly below LDA.
+
+
+#### **Question 8**
+
+##### **Business Analysis and Recommendations**
+
+###### **In this section, we will use the Implementation_Data file to generate business recommendations. This data file has information on 500 current customers. Use your logistic regression model with your best threshold (identified in part 2) to answer the following questions:**
+
+
+```{r}
+load("Implementation_Data.rda")
+impdata <- Implementation_Data
+head(impdata)
+```
+###### **In terms of relative importance how would you rate the predictors in your model.**
+```{r}
+summary(best_logistic_model)
+```
+
+###### **How many customers does your model predict are in danger of leaving?**
+
+```{r}
+mydata$SeniorCitizen <- factor(mydata$SeniorCitizen, levels = c(0, 1))
+
+PredictProbability <- predict(best_logistic_model, newdata = mydata, type = "response")
+
+mydata <- mydata %>%
+  mutate(Status = ifelse(PredictProbability >= 0.5, "Left", "Current"))
+
+head(mydata)
+```
+
+```{r}
+CustomersLeft <- sum(mydata$Status == "Left")  
+currentContinue <- sum(mydata$Status == "Current")  
+print(paste("The Number of Customers in danger of leaving are:", CustomersLeft))  
+print(paste("Number of customers that would continue the service are:", currentContinue))  
+```
+
+###### **What is the predicted loss in revenue per month if all these customers leave? This reflects the loss if no action is taken.**
+
+```{r}
+loss<-c()
+for (i in 1:CustomersLeft){
+  if(mydata$Status[i]=="Left"){
+    loss<-c(loss,mydata$MonthlyCharges[i])
+  }
+}
+cat("Predicted monthly revenue loss if these customers leave $",sum(loss))
+```
+
+###### **As a business manager, which factors would you focus on (for example you could invest in offering some incentives or promotions) to decrease the chances of customers leaving?**
+
+###### **• Tenure:** To encourage customers to stay longer, consider launching loyalty programs or tenure-based incentives. For example, you could offer annual bonuses, discounts, or exclusive services to long-term customers as a way to reward their loyalty and reduce churn.
+
+###### **• Total Charges:** If customers with higher total charges are more likely to leave, it’s worth exploring what services are contributing to these costs. You could introduce tiered pricing or offer discounts for high-usage customers to make their spending feel more worthwhile and competitive.
+
+###### **• Internet Service (Fiber Optic & No Internet):** Since fiber optic users show higher churn, focus on improving service reliability, speed, or customer support for them. For customers who currently don’t have internet, think about offering basic, low-cost internet packages to encourage upgrades without pushing them away.
+
+###### **• Contract (One-Year & Two-Year Plans):** Customers on longer-term contracts are more likely to stay, so it makes sense to promote the benefits of these plans. Offer discounts, perks, or better terms to make one- or two-year contracts more appealing and reduce short-term dropouts.
+
+###### **• Paperless Billing:** Paperless billing users tend to churn more, possibly because they’re younger or more tech-savvy and quick to switch providers. To retain them, try combining paperless billing with digital loyalty rewards, like monthly discounts or app-exclusive benefits.
+
+###### **• Payment Method:** Encourage customers to switch to auto-pay or electronic payments by offering small incentives, such as a one-time discount or bonus points. This not only makes payments easier for the customer but also helps improve retention by reducing missed payments.
+
+###### Following these actions will decrease the chances of customer leaving.
+
+
+
+
+###### **Propose an incentive scheme to your manager that can help reduce the loss in revenue by retaining some (or all) customers.**
+
+###### I recommend launching a promotional incentive program designed to encourage customers to switch to paperless billing and commit to longer-term contracts. Here’s how we can structure the offer:
+
+###### **• Paperless Billing Incentive:** Offer a $15 one-time credit to customers who opt into paperless billing. This small reward can motivate customers to make the switch, reducing mailing costs and promoting a more eco-friendly service.
+
+###### **• Loyalty Rewards for One-Year Contracts:** Provide an 15% discount in the form of loyalty points to customers who sign up for a one-year contract. These points can be redeemed on future bills, giving customers a reason to stay engaged and continue using our services.
+
+###### By offering ongoing rewards, we not only increase customer satisfaction but also build long-term habits and loyalty. These benefits help reinforce the value of staying with our company and reduce the likelihood of churn.
+
+
+###### **• Provide justification by evaluating costs and benefits of your incentive scheme. Costs will be the dollar amount in incentives given (for example). Benefits will be the revenues from these customers if they stay with your company. Compute the net benefits from your incentive scheme. Make a case in your report to your upper management for implementing your scheme.**
+
+
+```{r}
+# Add Promotional Credit for customers predicted to leave and not using paperless billing
+mydata <- mydata %>%
+  mutate(PromotionalCredit = ifelse(Status == "Left" & PaperlessBilling == "No", 10, 0))
+
+# Add Loyalty Reward: 11% of MonthlyCharges for customers predicted to leave
+mydata <- mydata %>%
+  mutate(LoyaltyReward = ifelse(Status == "Left", MonthlyCharges * 0.11, 0))
+
+# Calculate total incentive costs
+total_promotional_credit <- sum(mydata$PromotionalCredit, na.rm = TRUE)
+total_loyalty_reward <- sum(mydata$LoyaltyReward, na.rm = TRUE)
+total_autopay_reward <- sum(mydata$AutopayReward, na.rm = TRUE)  # Make sure this column exists
+
+# Total cost of incentives
+total_costs <- total_promotional_credit + total_loyalty_reward + total_autopay_reward
+
+# Estimate net benefit (assuming incentives retain customers who would otherwise leave)
+estimated_benefits <- sum(loss) - total_costs
+
+cat("Total Incentive Cost: $", round(total_costs, 2), "\n")
+cat("Estimated Benefit (Recovered Revenue - Costs): $", round(estimated_benefits, 2), "\n")
+```
+###### To implement the loyalty program, the company would need to invest $ 1125.52  in customer incentives. However, by offering these targeted promotions, the company stands to gain a net benefit of $ 849.23 from customers who might have otherwise left. Not only does this approach improve customer retention, but it also ensures that the incentives provide real value—for both the business and its customers.
